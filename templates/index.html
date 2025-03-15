@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RAG 챗봇</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        .chat-container {
+            margin-top: 20px;
+        }
+        .chat-box {
+            width: 100%;
+            height: 300px;
+            border: 1px solid #ddd;
+            padding: 10px;
+            margin-bottom: 10px;
+            overflow-y: auto;
+            white-space: pre-line; /* 줄바꿈 처리 */
+        }
+        .input-box {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            margin-top: 10px;
+        }
+        button {
+            padding: 10px 15px;
+            background-color: #007BFF;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <h1>RAG 기반 학습용 챗봇</h1>
+    <div class="chat-container">
+        <div class="chat-box" id="chatBox"></div>
+        <input class="input-box" id="question" type="text" placeholder="질문을 입력하세요..." />
+        <button onclick="askQuestion()">질문하기</button>
+    </div>
+
+    <script>
+        function askQuestion() {
+            const question = document.getElementById('question').value;
+            if (!question.trim()) return; // 빈 입력 방지
+
+            const chatBox = document.getElementById('chatBox');
+
+            // 사용자 질문 추가
+            const userMessage = document.createElement('p');
+            userMessage.innerHTML = `<strong>사용자:</strong> ${question}`;
+            chatBox.appendChild(userMessage);
+            chatBox.scrollTop = chatBox.scrollHeight;
+
+            // 질문 초기화
+            document.getElementById('question').value = '';
+
+            fetch('/query', {
+                method: 'POST',
+                body: JSON.stringify({ question: question }),
+                headers: { 'Content-Type': 'application/json' }
+            })
+            .then(response => {
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let answerText = '';
+
+                function processText({ done, value }) {
+                    if (done) {
+                        // 최종 AI 응답 추가
+                        const aiMessage = document.createElement('p');
+                        aiMessage.innerHTML = `<strong>AI:</strong> ${answerText.replace(/\n/g, '<br>')}`;
+                        chatBox.appendChild(aiMessage);
+                        chatBox.scrollTop = chatBox.scrollHeight;
+                        return;
+                    }
+
+                    // 스트리밍된 AI 응답 받기
+                    const newText = decoder.decode(value, { stream: true });
+                    answerText += newText;
+
+                    // 부분 업데이트 (즉각적인 표시)
+                    if (!document.getElementById('temp-ai')) {
+                        const tempAiMessage = document.createElement('p');
+                        tempAiMessage.id = 'temp-ai';
+                        tempAiMessage.innerHTML = `<strong>AI:</strong> `;
+                        chatBox.appendChild(tempAiMessage);
+                    }
+                    document.getElementById('temp-ai').innerHTML = `<strong>AI:</strong> ${answerText.replace(/\n/g, '<br>')}`;
+
+                    reader.read().then(processText);
+                }
+
+                reader.read().then(processText);
+            })
+            .catch(error => console.error('Error fetching data:', error));
+        }
+    </script>
+</body>
+</html>
