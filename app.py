@@ -58,7 +58,7 @@ def stream_response(prompt):
 # 메인 페이지
 @app.route('/')
 def index():
-    return render_template('test.html')
+    return render_template('index.html')
 
 # 질문-답변 api
 @app.route('/query', methods=['POST'])
