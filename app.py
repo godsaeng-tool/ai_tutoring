@@ -27,6 +27,12 @@ query_engine = index.as_query_engine(
 # 단기 기억 (최근 6개 대화 저장)
 conversation_history = deque(maxlen=6)
 
+# 어조 선택 딕셔너리(예시)
+tones = {
+    "a": "공격적이고 빈정대는",
+    "b": "선생님처럼 따뜻하고 정중한",
+    "c": "친구 같은 편한"
+}
 
 # 벡터 DB에서 질문 처리
 def generate_answer(question):
@@ -42,13 +48,14 @@ def stream_response(response_text):
 
 
 # 신뢰도 검증 함수
-def verify_answer(question, answer):
-    verification_prompt = f"이 질문에 이 답변이 맞아? 예/아니오로만 대답해: 질문: {question} 답변: {answer}"
+def verify_answer(question, answer, tone):
+
+    verification_prompt = f"이 질문에 대한 답변이 정확한지 평가해 주세요. 답변은 {tones[tone]} 어조를 반영해야 하지만, 정확성만 평가해야 합니다. 질문: {question} 답변: {answer}. 답변의 정확성만 평가하고, 예/아니오로 답해주세요."
 
     verification_response = openai.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
-            {"role": "system", "content": "당신은 답변의 정확성을 평가하는 역할을 합니다."},
+            {"role": "system", "content": f"당신은 답변의 정확성을 평가하는 역할을 합니다. 답변은 {tones[tone]} 어조를 반영해야 하지만, 정확성만 평가해야 합니다."},
             {"role": "user", "content": verification_prompt}
         ]
     )
@@ -68,11 +75,12 @@ def index():
 def query():
     data = request.json
     question = data.get('question')
+    tone = data.get('tone') # 숫자로 입력
     print(f"[질문] {question}")
 
     # 대화 기록 포함한 프롬프트 생성
     context = "\n".join([f"{role}: {content}" for role, content in conversation_history])
-    full_prompt = f"이전 대화:\n{context}\n\n사용자 질문: {question}\n\n한국어로 답변해주세요."
+    full_prompt = f"이전 대화:\n{context}\n\n사용자 질문: {question}\n\n한국어로 답변해주세요. {tones[tone]} 어조로 답변해주세요."
 
     # 사용자 질문 추가
     conversation_history.append(("사용자", question))
@@ -82,7 +90,7 @@ def query():
     print(f"[초기 답변] {answer}")
 
     # 검증
-    verification_result = verify_answer(question, answer)
+    verification_result = verify_answer(question, answer, tone)
 
     # 검증 결과가 "아니오"이면 새로운 답변 생성
     if verification_result in ["아니오", "아니요"]:
@@ -90,8 +98,8 @@ def query():
         response = openai.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
-                {"role": "system", "content": "당신은 강의 내용에 대해 정확한 답변을 제공하는 도우미입니다. 반드시 한국어로 답변해주세요."},
-                {"role": "user", "content": question}
+                {"role": "system", "content": "당신은 강의 내용에 대해 정확한 답변을 제공하는 도우미입니다. 반드시 한국어로 답변해주세요. {tones[tone]} 어조로 답변해주세요."},
+                {"role": "user", "content": full_prompt}
             ]
         )
         answer = response.choices[0].message.content
